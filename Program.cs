@@ -6,18 +6,17 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. ÅÚÏÇÏ DbContext ãÚ ŞÑÇÁÉ ÇáÇÊÕÇá ãä 
+// 1. ÅÚÏÇÏ DbContext
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 2. ŞÑÇÁÉ ãİÊÇÍ JWT ãä ÇáÅÚÏÇÏÇÊ
+// 2. ÅÚÏÇÏ JWT
 var jwtKey = builder.Configuration["Jwt:Key"];
 if (string.IsNullOrWhiteSpace(jwtKey))
 {
     throw new Exception("JWT key is missing. Please set 'Jwt:Key' in configuration.");
 }
 
-// 3. ÅÚÏÇÏ ÇáãÕÇÏŞÉ ÚÈÑ JWT
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -31,22 +30,21 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// 4. ÅÚÏÇÏ ÇáÎÏãÇÊ ÇáÃÎÑì
+// 3. ÎÏãÇÊ ÇáÊØÈíŞ
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// 5. ÅÚÏÇÏ ÇáÈÇíÈáÇíä
-if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// 4. ÅÚÏÇÏ Middleware
+// ÊİÚíá Swagger ÏÇÆãÇğ (ÓæÇÁ Development Ãæ Production)
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseHttpsRedirection();
-app.UseStaticFiles(); // ááÓãÇÍ ÈÇáæÕæá áÜ /images/
+
+app.UseStaticFiles(); // áÊÎÏíã ÇáÕæÑ ãËáÇğ ãä /images
 
 app.UseAuthentication();
 app.UseAuthorization();
