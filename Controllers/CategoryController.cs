@@ -15,29 +15,44 @@ public class CategoryController : ControllerBase
         _context = context;
     }
 
-    [HttpGet]
-    public async Task<ActionResult<IEnumerable<Category>>> GetCategories()
+    // DTO
+    public class CategoryDto
     {
-        return await _context.Categories.ToListAsync();
+        public int Id { get; set; }
+        public string? Name { get; set; }
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<CategoryDto>>> GetCategories()
+    {
+        var categories = await _context.Categories.ToListAsync();
+
+        return Ok(categories.Select(c => new CategoryDto
+        {
+            Id = c.Id,
+            Name = c.Name
+        }));
     }
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<Category>> GetCategory(int id)
+    public async Task<ActionResult<CategoryDto>> GetCategory(int id)
     {
         var category = await _context.Categories.FindAsync(id);
-        if (category == null)
+        if (category is null)
             return NotFound();
 
-        return category;
+        return new CategoryDto { Id = category.Id, Name = category.Name };
     }
 
     [HttpPost]
-    public async Task<ActionResult<Category>> CreateCategory(Category category)
+    public async Task<ActionResult<CategoryDto>> CreateCategory(Category category)
     {
         _context.Categories.Add(category);
         await _context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetCategory), new { id = category.Id }, category);
+        var dto = new CategoryDto { Id = category.Id, Name = category.Name };
+
+        return CreatedAtAction(nameof(GetCategory), new { id = category.Id }, dto);
     }
 
     [HttpPut("{id}")]
@@ -64,7 +79,7 @@ public class CategoryController : ControllerBase
     public async Task<IActionResult> DeleteCategory(int id)
     {
         var category = await _context.Categories.FindAsync(id);
-        if (category == null)
+        if (category is null)
             return NotFound();
 
         _context.Categories.Remove(category);

@@ -1,8 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ABCapoAPi.Data;
-using Microsoft.AspNetCore.Http;
-using System.IO;
+using ABCapoAPi.DTOs;
 
 namespace ABCapoAPi.Controllers;
 
@@ -17,33 +16,81 @@ public class ProductsController : ControllerBase
         _context = context;
     }
 
+    // GET: api/Products
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Product>>> GetProducts()
+    public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts(
+        [FromQuery] int? brandId,
+        [FromQuery] int? categoryId,
+        [FromQuery] string? search)
     {
         var baseUrl = $"{Request.Scheme}://{Request.Host}";
-        var products = await _context.Products.ToListAsync();
 
-        foreach (var p in products)
+        var query = _context.Products
+            .Include(p => p.Category)
+            .Include(p => p.Brand)
+            .AsQueryable();
+
+        if (brandId.HasValue)
+            query = query.Where(p => p.BrandId == brandId);
+
+        if (categoryId.HasValue)
+            query = query.Where(p => p.CategoryId == categoryId);
+
+        if (!string.IsNullOrWhiteSpace(search))
+            query = query.Where(p => p.Name!.Contains(search));
+
+        var products = await query.ToListAsync();
+
+        var result = products.Select(p => new ProductDto
         {
-            if (!string.IsNullOrWhiteSpace(p.ImageUrl) && !p.ImageUrl.StartsWith("http"))
-                p.ImageUrl = baseUrl + p.ImageUrl;
-        }
+            Id = p.Id,
+            Name = p.Name,
+            Price = p.Price,
+            Quantity = p.Quantity,
+            ImageUrl = string.IsNullOrWhiteSpace(p.ImageUrl)
+                ? null
+                : (p.ImageUrl.StartsWith("http") ? p.ImageUrl : baseUrl + p.ImageUrl),
+            CategoryName = p.Category?.Name,
+            BrandName = p.Brand?.Name
+        });
 
-        return products;
+        return Ok(result);
     }
 
+    // GET: api/Products/5
     [HttpGet("{id}")]
-    public async Task<ActionResult<Product>> GetProduct(int id)
+    public async Task<ActionResult<ProductDto>> GetProduct(int id)
     {
-        var product = await _context.Products.FindAsync(id);
-        return product is null ? NotFound() : product;
+        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+
+        var product = await _context.Products
+            .Include(p => p.Category)
+            .Include(p => p.Brand)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (product == null) return NotFound();
+
+        var dto = new ProductDto
+        {
+            Id = product.Id,
+            Name = product.Name,
+            Price = product.Price,
+            Quantity = product.Quantity,
+            ImageUrl = string.IsNullOrWhiteSpace(product.ImageUrl)
+                ? null
+                : (product.ImageUrl.StartsWith("http") ? product.ImageUrl : baseUrl + product.ImageUrl),
+            CategoryName = product.Category?.Name,
+            BrandName = product.Brand?.Name
+        };
+
+        return dto;
     }
 
+    // PUT: api/Products/5
     [HttpPut("{id}")]
     public async Task<IActionResult> PutProduct(int id, Product product)
     {
-        if (id != product.Id)
-            return BadRequest();
+        if (id != product.Id) return BadRequest();
 
         _context.Entry(product).State = EntityState.Modified;
 
@@ -59,6 +106,7 @@ public class ProductsController : ControllerBase
         return NoContent();
     }
 
+    // POST: api/Products
     [HttpPost]
     public async Task<ActionResult<Product>> PostProduct(Product product)
     {
@@ -68,12 +116,12 @@ public class ProductsController : ControllerBase
         return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, product);
     }
 
+    // DELETE: api/Products/5
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteProduct(int id)
     {
         var product = await _context.Products.FindAsync(id);
-        if (product is null)
-            return NotFound();
+        if (product == null) return NotFound();
 
         _context.Products.Remove(product);
         await _context.SaveChangesAsync();
@@ -81,11 +129,11 @@ public class ProductsController : ControllerBase
         return NoContent();
     }
 
+    // POST: api/Products/upload
     [HttpPost("upload")]
     public async Task<IActionResult> UploadImage(IFormFile file)
     {
-        if (file == null || file.Length == 0)
-            return BadRequest("No file uploaded.");
+        if (file == null || file.Length == 0) return BadRequest("No file uploaded.");
 
         var uploadsFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/images");
 
