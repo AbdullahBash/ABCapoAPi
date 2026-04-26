@@ -2,88 +2,143 @@
 using Microsoft.EntityFrameworkCore;
 using ABCapoAPi.Data;
 using ABCapoAPi.DTOs;
+using Microsoft.AspNetCore.Authorization;
 
 namespace ABCapoAPi.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
-public class ProductsController : ControllerBase
+[Authorize]
+public class ProductsController(AppDbContext _context) : ControllerBase
 {
-    private readonly AppDbContext _context;
-
-    public ProductsController(AppDbContext context)
-    {
-        _context = context;
-    }
-
     // GET: api/Products
+    [AllowAnonymous]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ProductDto>>> GetProducts(
         [FromQuery] int? brandId,
         [FromQuery] int? categoryId,
-        [FromQuery] string? search)
+        [FromQuery] string? search,
+        [FromQuery] int? colorId,
+        [FromQuery] int? sizeId,
+        [FromQuery] int? copyId,
+        [FromQuery] bool? isFeatured)
     {
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
-
-        var query = _context.Products
-            .Include(p => p.Category)
-            .Include(p => p.Brand)
-            .AsQueryable();
-
-        if (brandId.HasValue)
-            query = query.Where(p => p.BrandId == brandId);
-
-        if (categoryId.HasValue)
-            query = query.Where(p => p.CategoryId == categoryId);
-
-        if (!string.IsNullOrWhiteSpace(search))
-            query = query.Where(p => p.Name!.Contains(search));
-
-        var products = await query.ToListAsync();
-
-        var result = products.Select(p => new ProductDto
+        try
         {
-            Id = p.Id,
-            Name = p.Name,
-            Price = p.Price,
-            Quantity = p.Quantity,
-            ImageUrl = string.IsNullOrWhiteSpace(p.ImageUrl)
-                ? null
-                : (p.ImageUrl.StartsWith("http") ? p.ImageUrl : baseUrl + p.ImageUrl),
-            CategoryName = p.Category?.Name,
-            BrandName = p.Brand?.Name
-        });
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
 
-        return Ok(result);
+            var query = _context.Products
+                .Include(p => p.Category)
+                .Include(p => p.Brand)
+                .Include(p => p.Color)
+                .Include(p => p.Size)
+                .Include(p => p.Copy)
+                .Where(p => p.IsVisible)
+                .AsQueryable();
+
+            if (isFeatured.HasValue && isFeatured.Value == true)
+            {
+                query = query.Where(p => p.IsFeatured);
+            }
+
+            if (brandId.HasValue) query = query.Where(p => p.BrandId == brandId);
+            if (categoryId.HasValue) query = query.Where(p => p.CategoryId == categoryId);
+
+            if (colorId.HasValue) query = query.Where(p => p.ColorID == colorId);
+            if (sizeId.HasValue) query = query.Where(p => p.SizeID == sizeId);
+            if (copyId.HasValue) query = query.Where(p => p.CopyID == copyId);
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var lowerSearch = search.ToLower();
+                query = query.Where(p => p.Name != null && p.Name.ToLower().Contains(lowerSearch));
+            }
+
+            var products = await query
+                .OrderBy(p => p.SortOrder)
+                .ThenBy(p => p.Name)
+                .ToListAsync();
+
+            var result = products.Select(p => new ProductDto
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Price = p.Price,
+                Quantity = p.Quantity,
+                ImageUrl = string.IsNullOrWhiteSpace(p.ImageUrl) ? null : (p.ImageUrl.StartsWith("http") ? p.ImageUrl : baseUrl + p.ImageUrl),
+
+                // --- الإضافة الحاسمة: إرسال الـ IDs ---
+                CategoryId = p.CategoryId,  // <--- أضف هذا السطر
+                CategoryName = p.Category?.Name,
+
+                BrandId = p.BrandId,        // <--- أضف هذا السطر
+                BrandName = p.Brand?.Name,
+                // ------------------------------------
+
+                ColorID = p.ColorID,
+                ColorName = p.Color?.Name,
+                ColorHex = p.Color?.Hex,
+                SizeID = p.SizeID,
+                SizeName = p.Size?.Name,
+                CopyID = p.CopyID,
+                CopyName = p.Copy?.Name
+            });
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = "Error", error = ex.Message });
+        }
     }
 
     // GET: api/Products/5
+    [AllowAnonymous]
     [HttpGet("{id}")]
     public async Task<ActionResult<ProductDto>> GetProduct(int id)
     {
         var baseUrl = $"{Request.Scheme}://{Request.Host}";
-
         var product = await _context.Products
-            .Include(p => p.Category)
-            .Include(p => p.Brand)
+            .Include(p => p.Category).Include(p => p.Brand)
+            .Include(p => p.Color).Include(p => p.Size).Include(p => p.Copy)
             .FirstOrDefaultAsync(p => p.Id == id);
 
         if (product == null) return NotFound();
 
-        var dto = new ProductDto
+        // --- إصلاح هنا أيضاً ---
+        return new ProductDto
         {
             Id = product.Id,
             Name = product.Name,
             Price = product.Price,
             Quantity = product.Quantity,
-            ImageUrl = string.IsNullOrWhiteSpace(product.ImageUrl)
-                ? null
-                : (product.ImageUrl.StartsWith("http") ? product.ImageUrl : baseUrl + product.ImageUrl),
-            CategoryName = product.Category?.Name,
-            BrandName = product.Brand?.Name
-        };
+            ImageUrl = string.IsNullOrWhiteSpace(product.ImageUrl) ? null : (product.ImageUrl.StartsWith("http") ? product.ImageUrl : baseUrl + product.ImageUrl),
 
-        return dto;
+            // إرسال الـ IDs
+            CategoryId = product.CategoryId,  // <--- أضف هذا
+            CategoryName = product.Category?.Name,
+
+            BrandId = product.BrandId,        // <--- أضف هذا
+            BrandName = product.Brand?.Name,
+            // -----------------------
+
+            ColorID = product.ColorID,
+            ColorName = product.Color?.Name,
+            ColorHex = product.Color?.Hex,
+            SizeID = product.SizeID,
+            SizeName = product.Size?.Name,
+            CopyID = product.CopyID,
+            CopyName = product.Copy?.Name
+        };
+    }
+
+    // POST: api/Products
+    [HttpPost]
+    public async Task<ActionResult<Product>> PostProduct(Product product)
+    {
+        _context.Products.Add(product);
+        await _context.SaveChangesAsync();
+        return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, product);
     }
 
     // PUT: api/Products/5
@@ -104,16 +159,6 @@ public class ProductsController : ControllerBase
         }
 
         return NoContent();
-    }
-
-    // POST: api/Products
-    [HttpPost]
-    public async Task<ActionResult<Product>> PostProduct(Product product)
-    {
-        _context.Products.Add(product);
-        await _context.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, product);
     }
 
     // DELETE: api/Products/5

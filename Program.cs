@@ -1,51 +1,124 @@
 using ABCapoAPi.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.Authentication.Facebook;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Text.Json.Serialization;
+// ≈÷«›… «·‹ Using «·Œ«’ »‹ PostgreSQL ·œ⁄„ UseNpgsql
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. ≈⁄œ«œ DbContext
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+// ===  ÕœÌœ „Ã·œ wwwroot ===
+builder.WebHost.UseWebRoot("wwwroot");
 
-// 2. ≈⁄œ«œ JWT
-var jwtKey = builder.Configuration["Jwt:Key"];
-if (string.IsNullOrWhiteSpace(jwtKey))
+// 1. ≈⁄œ«œ DbContext («·–ﬂÌ - Ìœ⁄„ «·«À‰Ì‰)
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+
+// ›Õ’ «·‹ Connection String · ÕœÌœ ‰Ê⁄ ﬁ«⁄œ… «·»Ì«‰«   ·ﬁ«∆Ì«
+if (connectionString.Contains("Host=") || connectionString.Contains("Server=postgres"))
 {
-    throw new Exception("JWT key is missing. Please set 'Jwt:Key' in configuration.");
+    // «·Õ«·… 1: —«»ÿ ·‹ PostgreSQL („À· Render)
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(connectionString));
+}
+else
+{
+    // «·Õ«·… 2: —«»ÿ ·‹ SQL Server («·„Õ·Ì)
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlServer(connectionString));
 }
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+// 2. ≈⁄œ«œ «·„’«œﬁ… (JWT + Social Login)
+builder.Services.AddAuthentication(options =>
+{
+    // ‰ﬁÊ„ »Ã⁄· JWT ÂÊ «·«› —«÷Ì ·Ê«ÃÂ… «·‹ API
+    options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = false,
-            ValidateAudience = false,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
-        };
-    });
+        ValidateIssuer = false,
+        ValidateAudience = false,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+
+        // --- «·„› «Õ «·„ÊÕœ („ÿ«»ﬁ ·‹ TokenService) ---
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("abbaFireEnd@2025SuperSecretKeyForJWTGeneration!"))
+    };
+})
+// ≈÷«›… Cookie Authentication (÷—Ê—Ì · œ›ﬁ OAuth2 «·Œ«—ÃÌ)
+.AddCookie(options =>
+{
+    options.LoginPath = "/api/Authentication/login"; // „”«— ≈⁄«œ… «· ÊÃÌÂ ≈–« ·„ Ìﬂ‰ „”Ã· œŒÊ·
+    options.LogoutPath = "/api/Authentication/logout";
+    options.ExpireTimeSpan = TimeSpan.FromDays(7);
+})
+// ≈⁄œ«œ Google
+.AddGoogle(options =>
+{
+    // Ì „ ﬁ—«¡… Â–Â «·ﬁÌ„ „‰ appsettings.Development.json
+    options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? "YOUR_GOOGLE_CLIENT_ID";
+    options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? "YOUR_GOOGLE_CLIENT_SECRET";
+    options.CallbackPath = "/signin-google";
+})
+// ≈⁄œ«œ Facebook
+.AddFacebook(options =>
+{
+    options.AppId = builder.Configuration["Authentication:Facebook:AppId"] ?? "YOUR_FACEBOOK_APP_ID";
+    options.AppSecret = builder.Configuration["Authentication:Facebook:AppSecret"] ?? "YOUR_FACEBOOK_APP_SECRET";
+    options.CallbackPath = "/signin-facebook";
+});
+
+// ≈⁄œ«œ CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowReactApp",
+        builder => builder
+            .WithOrigins(
+                "http://localhost:3000",
+                "http://192.168.1.10:3000",
+                "http://127.0.0.1:3000"
+            )
+            .AllowAnyMethod()
+            .AllowAnyHeader()
+            .AllowCredentials()); // ÷—Ê—Ì ··ﬂÊﬂÌ“
+});
 
 // 3. Œœ„«  «· ÿ»Ìﬁ
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.WriteIndented = true;
+    });
+
+// 4. ≈⁄œ«œ «· ŒÊÌ·
+builder.Services.AddAuthorization();
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// 4. ≈⁄œ«œ Middleware
-//  ›⁄Ì· Swagger œ«∆„« (”Ê«¡ Development √Ê Production)
+// 5. ≈⁄œ«œ Middleware
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.UseHttpsRedirection();
+// ---  ⁄ÿÌ· HTTPS Redirect ---
+// app.UseHttpsRedirection(); 
 
-app.UseStaticFiles(); // · ŒœÌ„ «·’Ê— „À·« „‰ /images
+app.UseCors("AllowReactApp");
 
+// ≈⁄œ«œ «·’Ê—
+app.UseStaticFiles();
+
+// «· — Ì» „Â„: Authentication ﬁ»· Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 

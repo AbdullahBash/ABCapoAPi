@@ -11,5 +11,10 @@ public class Category
     [Required]
     public string Name { get; set; } = string.Empty;
 
+    // --- الخصائص الجديدة (للترتيب والظهور) ---
+    public int SortOrder { get; set; } = 0;
+    public bool? IsVisible { get; set; } = true;
+    // ---------------------------------------
+
     public List<Product> Products { get; set; } = new();
 }

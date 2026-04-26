@@ -25,7 +25,13 @@ public class CategoryController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<CategoryDto>>> GetCategories()
     {
-        var categories = await _context.Categories.ToListAsync();
+        // --- التعديل هنا: إصلاح الخطأ ---
+        var categories = await _context.Categories
+            .Where(c => c.IsVisible == true)  // <--- تم إضافة == true لمعالجة الـ Nullable
+            .OrderBy(c => c.SortOrder)
+            .ThenBy(c => c.Name)
+            .ToListAsync();
+        // -----------------------------------
 
         return Ok(categories.Select(c => new CategoryDto
         {
@@ -47,6 +53,9 @@ public class CategoryController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<CategoryDto>> CreateCategory(Category category)
     {
+        // التأكد من أن القيمة الافتراضية محددة إذا لم يتم إرسالها
+        if (!category.IsVisible.HasValue) category.IsVisible = true;
+
         _context.Categories.Add(category);
         await _context.SaveChangesAsync();
 
