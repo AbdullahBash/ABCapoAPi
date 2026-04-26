@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Authentication.Facebook;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Text.Json.Serialization;
-// ≈÷«›… «·‹ Using «·Œ«’ »‹ PostgreSQL ·œ⁄„ UseNpgsql
 using Npgsql.EntityFrameworkCore.PostgreSQL;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,7 +20,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 // ›Õ’ «·‹ Connection String · ÕœÌœ ‰Ê⁄ ﬁ«⁄œ… «·»Ì«‰«   ·ﬁ«∆Ì«
 if (connectionString.Contains("Host=") || connectionString.Contains("Server=postgres"))
 {
-    // «·Õ«·… 1: —«»ÿ ·‹ PostgreSQL („À· Render)
+    // «·Õ«·… 1: —«»ÿ ·‹ PostgreSQL („À· Render √Ê Railway)
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseNpgsql(connectionString));
 }
@@ -110,8 +109,8 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// ---  ⁄ÿÌ· HTTPS Redirect ---
-// app.UseHttpsRedirection(); 
+//  ›⁄Ì· HTTPS Redirect ··”Ì—›—«  «·ÕﬁÌﬁÌ… („À· Railway)
+app.UseHttpsRedirection();
 
 app.UseCors("AllowReactApp");
 
