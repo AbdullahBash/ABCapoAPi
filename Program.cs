@@ -74,19 +74,15 @@ builder.Services.AddAuthentication(options =>
     options.CallbackPath = "/signin-facebook";
 });
 
-// ≈⁄œ«œ CORS
+// ≈⁄œ«œ CORS („› ÊÕ ··Ã„Ì⁄ ·Õ· „‘ﬂ·… Railway Ê«·Ê«ÃÂ…)
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp",
+    options.AddPolicy("AllowAll",
         builder => builder
-            .WithOrigins(
-                "http://localhost:3000",
-                "http://192.168.1.10:3000",
-                "http://127.0.0.1:3000"
-            )
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-            .AllowCredentials()); // ÷—Ê—Ì ··ﬂÊﬂÌ“
+            .AllowAnyOrigin()       // Ì”„Õ »√Ì „Êﬁ⁄ (Railway, Localhost, Vercel)
+            .AllowAnyMethod()       // Ì”„Õ »‹ GET, POST, DELETE...
+            .AllowAnyHeader()       // Ì”„Õ »√Ì Headers
+            .AllowCredentials());    // „Â„ ≈–« ﬂ‰   ” Œœ„ «·ﬂÊﬂÌ“
 });
 
 // 3. Œœ„«  «· ÿ»Ìﬁ
@@ -112,7 +108,7 @@ app.UseSwaggerUI();
 //  ›⁄Ì· HTTPS Redirect ··”Ì—›—«  «·ÕﬁÌﬁÌ… („À· Railway)
 app.UseHttpsRedirection();
 
-app.UseCors("AllowReactApp");
+app.UseCors("AllowAll");
 
 // ≈⁄œ«œ «·’Ê—
 app.UseStaticFiles();
