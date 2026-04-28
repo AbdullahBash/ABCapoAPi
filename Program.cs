@@ -1,3 +1,4 @@
+using System;
 using ABCapoAPi.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -119,5 +120,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// --- ≈‰‘«¡ ﬁ«⁄œ… «·»Ì«‰«   ·ﬁ«∆Ì« ⁄‰œ »œ¡ «· ‘€Ì· ---
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+}
 
 app.Run();
