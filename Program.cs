@@ -17,7 +17,7 @@ builder.WebHost.UseWebRoot("wwwroot");
 
 // 1. ≈⁄œ«œ DbContext (≈Ã»«—Ì ·‹ Postgres - Õ· ‰Â«∆Ì ·„‘ﬂ·… Railway)
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("RAILWAY_DATABASE_URL") ?? builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DATABASE_URL") ?? builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // 2. ≈⁄œ«œ «·„’«œﬁ… (JWT + Social Login)
 builder.Services.AddAuthentication(options =>
