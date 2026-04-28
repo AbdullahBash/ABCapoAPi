@@ -15,22 +15,9 @@ var builder = WebApplication.CreateBuilder(args);
 // === ÊÍÏíÏ ãÌáÏ wwwroot ===
 builder.WebHost.UseWebRoot("wwwroot");
 
-// 1. ÅÚÏÇÏ DbContext (ÇáĞßí - íÏÚã ÇáÇËäíä)
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-
-// İÍÕ ÇáÜ Connection String áÊÍÏíÏ äæÚ ŞÇÚÏÉ ÇáÈíÇäÇÊ ÊáŞÇÆíÇğ
-if (connectionString.Contains("Host=") || connectionString.Contains("Server=postgres"))
-{
-    // ÇáÍÇáÉ 1: ÑÇÈØ áÜ PostgreSQL (ãËá Render Ãæ Railway)
-    builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseNpgsql(connectionString));
-}
-else
-{
-    // ÇáÍÇáÉ 2: ÑÇÈØ áÜ SQL Server (ÇáãÍáí)
-    builder.Services.AddDbContext<AppDbContext>(options =>
-        options.UseSqlServer(connectionString));
-}
+// 1. ÅÚÏÇÏ DbContext (ÅÌÈÇÑí áÜ Postgres - Íá ãÔßáÉ Railway)
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // 2. ÅÚÏÇÏ ÇáãÕÇÏŞÉ (JWT + Social Login)
 builder.Services.AddAuthentication(options =>
@@ -83,7 +70,6 @@ builder.Services.AddCors(options =>
             .AllowAnyOrigin()       // íÓãÍ ÈÃí ãæŞÚ (Railway, Localhost, Vercel)
             .AllowAnyMethod()       // íÓãÍ ÈÜ GET, POST, DELETE...
             .AllowAnyHeader()       // íÓãÍ ÈÃí Headers
-                                    // Êã ÅÒÇáÉ AllowCredentials áÊÌäÈ ÇáÊÚÇÑÖ ãÚ AllowAnyOrigin
     );
 });
 
