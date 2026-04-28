@@ -107,15 +107,4 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// --- ÿ»«⁄… —«»ÿ «·« ’«· ·· Õﬁﬁ „‰ «·„‘ﬂ·… ---
-var connString = builder.Configuration.GetConnectionString("RAILWAY_DATABASE_URL") ?? builder.Configuration.GetConnectionString("DefaultConnection");
-Console.WriteLine($"[DEBUG] Connection String is: {connString ?? "NULL"}");
-
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    //  „ ≈Ìﬁ«› EnsureCreated „ƒﬁ « · Ã‰» «·«‰ÂÌ«—
-    // db.Database.EnsureCreated(); 
-}
-
 app.Run();
