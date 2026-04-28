@@ -82,7 +82,8 @@ builder.Services.AddCors(options =>
             .AllowAnyOrigin()       // Ì”„Õ »√Ì „Êﬁ⁄ (Railway, Localhost, Vercel)
             .AllowAnyMethod()       // Ì”„Õ »‹ GET, POST, DELETE...
             .AllowAnyHeader()       // Ì”„Õ »√Ì Headers
-            .AllowCredentials());    // „Â„ ≈–« ﬂ‰   ” Œœ„ «·ﬂÊﬂÌ“
+                                    //  „ ≈“«·… AllowCredentials · Ã‰» «· ⁄«—÷ „⁄ AllowAnyOrigin
+    );
 });
 
 // 3. Œœ„«  «· ÿ»Ìﬁ
