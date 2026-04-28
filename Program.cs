@@ -107,4 +107,15 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// --- ÅäÔÇÁ ŞÇÚÏÉ ÇáÈíÇäÇÊ ÊáŞÇÆíÇğ ÅĞÇ áã Êßä ãæÌæÏÉ ---
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    // ÇáÊÍŞŞ ÅĞÇ ßÇäÊ ŞÇÚÏÉ ÇáÈíÇäÇÊ ãæÌæÏÉ áÊÌäÈ ÇáÊßÑÇÑ
+    if (!db.Database.CanConnect())
+    {
+        db.Database.EnsureCreated();
+    }
+}
+
 app.Run();
