@@ -15,11 +15,9 @@ var builder = WebApplication.CreateBuilder(args);
 // ===  ÕœÌœ „Ã·œ wwwroot ===
 builder.WebHost.UseWebRoot("wwwroot");
 
-// === 1. ≈⁄œ«œ DbContext (√Ê·ÊÌ… Railway À„ Localhost) ===
-// 1. ‰ Õﬁﬁ √Ê·« „‰ „ €Ì— Railway
+// === 1. ≈⁄œ«œ DbContext («·Õ· «·‰Â«∆Ì ·„‘«ﬂ· Railway SSL) ===
 var connectionString = builder.Configuration["DATABASE_URL"];
 
-// 2. ≈–« ·„ ‰Ãœ° ‰»ÕÀ ›Ì „·› appsettings «·„Õ·Ì
 if (string.IsNullOrEmpty(connectionString))
 {
     connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -27,12 +25,18 @@ if (string.IsNullOrEmpty(connectionString))
 
 if (string.IsNullOrEmpty(connectionString))
 {
-    throw new Exception("·„ Ì „ «·⁄ÀÊ— ⁄·Ï ”·”·… « ’«· »ﬁ«⁄œ… «·»Ì«‰« .");
+    throw new Exception("·„ Ì „ «·⁄ÀÊ— ⁄·Ï ”·”·… « ’«· ﬁ«⁄œ… «·»Ì«‰« .");
 }
 
-// 3.  ”ÃÌ· «·‹ DbContext
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+{
+    options.UseNpgsql(connectionString, npgsqlOptions =>
+    {
+        // Â–« «·”ÿ— ÷—Ê—Ì Ãœ« ·Õ· „‘ﬂ·… (EndOfStreamException) ›Ì Railway
+        npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 5);
+        npgsqlOptions.CommandTimeout(30);
+    });
+});
 
 // === 2. ≈⁄œ«œ «·„’«œﬁ… (JWT + Social Login) ===
 builder.Services.AddAuthentication(options =>
@@ -70,18 +74,11 @@ builder.Services.AddAuthentication(options =>
     options.CallbackPath = "/signin-facebook";
 });
 
-// === ≈⁄œ«œ CORS ===
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll",
-        builder => builder
-            .AllowAnyOrigin()
-            .AllowAnyMethod()
-            .AllowAnyHeader()
-    );
+    options.AddPolicy("AllowAll", builder => builder.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 });
 
-// === 3. Œœ„«  «· ÿ»Ìﬁ ===
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -95,7 +92,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// === 4. ≈⁄œ«œ Middleware ===
+// === 3. ≈⁄œ«œ Middleware ===
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseHttpsRedirection();
@@ -103,16 +100,14 @@ app.UseCors("AllowAll");
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
-// === 5. „‰ÿﬁ »œ¡ «· ‘€Ì· (≈’·«Õ ‰Â«∆Ì ··≈‰‘«¡ Ê«·« ’«·) ===
+// === 4. „‰ÿﬁ »œ¡ «· ‘€Ì· (Retry Logic + EnsureCreated) ===
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    // --- «·„—Õ·… «·√Ê·Ï: „Õ«Ê·… «·« ’«· »«·Œ«œ„ (Retry Logic) ---
     int maxRetries = 5;
     int delayMs = 5000;
 
@@ -120,11 +115,11 @@ using (var scope = app.Services.CreateScope())
     {
         try
         {
-            logger.LogInformation($"„Õ«Ê·… «·« ’«· »Œ«œ„ ﬁ«⁄œ… «·»Ì«‰« ... ({i + 1}/{maxRetries})");
+            logger.LogInformation($"„Õ«Ê·… «·« ’«· »ﬁ«⁄œ… «·»Ì«‰« ... ({i + 1}/{maxRetries})");
             if (await db.Database.CanConnectAsync())
             {
-                logger.LogInformation(" „ «·« ’«· »Œ«œ„ ﬁ«⁄œ… «·»Ì«‰«  »‰Ã«Õ!");
-                break; // ‰ÃÕ «·« ’«·° ‰Œ—Ã „‰ «·Õ·ﬁ…
+                logger.LogInformation(" „ «·« ’«· »ﬁ«⁄œ… «·»Ì«‰«  »‰Ã«Õ!");
+                break;
             }
         }
         catch (Exception ex)
@@ -139,24 +134,20 @@ using (var scope = app.Services.CreateScope())
         }
         else
         {
-            // ≈–« ›‘· «·« ’«·  „«„« »⁄œ «·„Õ«Ê·« ° ‰ Êﬁ› Â‰«
-            logger.LogError("·„ ‰ „ﬂ‰ „‰ «·« ’«· »ﬁ«⁄œ… «·»Ì«‰« .");
-            throw new Exception("›‘· «·« ’«· »ﬁ«⁄œ… «·»Ì«‰« .");
+            logger.LogError("›‘· «·« ’«· »ﬁ«⁄œ… «·»Ì«‰« .");
+            throw new Exception("›‘· «·« ’«·.");
         }
     }
 
-    // --- «·„—Õ·… «·À«‰Ì…: ≈‰‘«¡ «·Ãœ«Ê· (Ì „ „—… Ê«Õœ… ›ﬁÿ »⁄œ ‰Ã«Õ «·« ’«·) ---
     try
     {
-        logger.LogInformation("Ã«—Ì «· Õﬁﬁ „‰ «·Ãœ«Ê· Ê≈‰‘«∆Â« ≈–« ·“„ «·√„—...");
+        logger.LogInformation("Ã«—Ì «· Õﬁﬁ „‰ «·Ãœ«Ê· Ê≈‰‘«∆Â«...");
         db.Database.EnsureCreated();
         logger.LogInformation(" „ «· √ﬂœ „‰ ﬁ«⁄œ… «·»Ì«‰«  Ê«·Ãœ«Ê· »‰Ã«Õ.");
     }
     catch (Exception ex)
     {
-        // ›Ì Õ«· ÊÃÊœ Œÿ√ ›Ì »‰Ì… ﬁ«⁄œ… «·»Ì«‰« ° ‰ÿ»⁄ «·Œÿ√ ·„⁄—›… «·”»»
-        logger.LogError($"ÕœÀ Œÿ√ √À‰«¡ ≈‰‘«¡ «·Ãœ«Ê·: {ex.Message}");
-        // Ì„ﬂ‰ﬂ ≈“«·… «·”ÿ— «· «·Ì ≈–« ﬂ‰   —Ìœ  Ã«Â· √Œÿ«¡ «·„Œÿÿ Ê«·«” „—«—
+        logger.LogError($"Œÿ√ √À‰«¡ ≈‰‘«¡ «·Ãœ«Ê·: {ex.Message}");
         throw;
     }
 }
