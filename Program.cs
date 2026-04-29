@@ -1,5 +1,5 @@
 using System;
-using ABCapoAPi.Data;
+using ABCapoAPi.Data; // ÊÃßÏ Ãä åĞÇ ÇáÇÓã íÊØÇÈŞ ãÚ ÇÓã ãÓÇÍÉ ÇáÇÓã ÇáÎÇÕÉ Èß (Namespace)
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -15,11 +15,26 @@ var builder = WebApplication.CreateBuilder(args);
 // === ÊÍÏíÏ ãÌáÏ wwwroot ===
 builder.WebHost.UseWebRoot("wwwroot");
 
-// 1. ÅÚÏÇÏ DbContext (ÅÌÈÇÑí áÜ Postgres - Íá äåÇÆí áãÔßáÉ Railway)
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DATABASE_URL") ?? builder.Configuration.GetConnectionString("DefaultConnection")));
+// === 1. ÅÚÏÇÏ DbContext (ÅÕáÇÍ äåÇÆí áãÔßáÉ Railway) ===
+// äÍÇæá ŞÑÇÁÉ ÇáÓáÓáÉ ÇáÇİÊÑÇÖíÉ (ááÚãá ÇáãÍáí)
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-// 2. ÅÚÏÇÏ ÇáãÕÇÏŞÉ (JWT + Social Login)
+// ÅĞÇ áã äÌÏ¡ äÈÍË Úä ãÊÛíÑ ÇáÈíÆÉ ÇáÎÇÕ ÈÜ Railway ãÈÇÔÑÉ (DATABASE_URL)
+if (string.IsNullOrEmpty(connectionString))
+{
+    connectionString = builder.Configuration["DATABASE_URL"];
+}
+
+if (string.IsNullOrEmpty(connectionString))
+{
+    throw new Exception("áã íÊã ÇáÚËæÑ Úáì ÓáÓáÉ ÇÊÕÇá ÈŞÇÚÏÉ ÇáÈíÇäÇÊ. ÊÃßÏ ãä ãÊÛíÑ DATABASE_URL İí Railway.");
+}
+
+// ÊÓÌíá ÇáÜ DbContext
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// === 2. ÅÚÏÇÏ ÇáãÕÇÏŞÉ (JWT + Social Login) ===
 builder.Services.AddAuthentication(options =>
 {
     // äŞæã ÈÌÚá JWT åæ ÇáÇİÊÑÇÖí áæÇÌåÉ ÇáÜ API
@@ -62,7 +77,7 @@ builder.Services.AddAuthentication(options =>
     options.CallbackPath = "/signin-facebook";
 });
 
-// ÅÚÏÇÏ CORS (ãİÊæÍ ááÌãíÚ áÍá ãÔßáÉ Railway æÇáæÇÌåÉ)
+// === ÅÚÏÇÏ CORS (ãİÊæÍ ááÌãíÚ áÍá ãÔßáÉ Railway æÇáæÇÌåÉ) ===
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll",
@@ -73,7 +88,7 @@ builder.Services.AddCors(options =>
     );
 });
 
-// 3. ÎÏãÇÊ ÇáÊØÈíŞ
+// === 3. ÎÏãÇÊ ÇáÊØÈíŞ ===
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -81,7 +96,7 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.WriteIndented = true;
     });
 
-// 4. ÅÚÏÇÏ ÇáÊÎæíá
+// === 4. ÅÚÏÇÏ ÇáÊÎæíá ===
 builder.Services.AddAuthorization();
 
 builder.Services.AddEndpointsApiExplorer();
@@ -89,7 +104,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// 5. ÅÚÏÇÏ Middleware
+// === 5. ÅÚÏÇÏ Middleware ===
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -107,14 +122,46 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// --- ÅäÔÇÁ ŞÇÚÏÉ ÇáÈíÇäÇÊ ÊáŞÇÆíÇğ ÅĞÇ áã Êßä ãæÌæÏÉ ---
+// === 6. ãäØŞ ÈÏÁ ÇáÊÔÛíá ãÚ ÅÚÇÏÉ ÇáãÍÇæáÉ (Íá ãÔßáÉ ÇáÇäåíÇÑ EndOfStreamException) ===
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    // ÇáÊÍŞŞ ÅĞÇ ßÇäÊ ŞÇÚÏÉ ÇáÈíÇäÇÊ ãæÌæÏÉ áÊÌäÈ ÇáÊßÑÇÑ
-    if (!db.Database.CanConnect())
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    int maxRetries = 5;       // ãÍÇæáÉ 5 ãÑÇÊ
+    int delayMs = 5000;      // ÇäÊÙÇÑ 5 ËæÇäí Èíä ÇáãÍÇæáÇÊ
+
+    for (int i = 0; i < maxRetries; i++)
     {
-        db.Database.EnsureCreated();
+        try
+        {
+            logger.LogInformation($"ãÍÇæáÉ ÑŞã {i + 1}: ÌÇÑí ÇáÇÊÕÇá ÈŞÇÚÏÉ ÇáÈíÇäÇÊ...");
+
+            // äÓÊÎÏã CanConnectAsync ááÊÍŞŞ ÈÔßá ÛíÑ ãÊÒÇãä
+            if (await db.Database.CanConnectAsync())
+            {
+                logger.LogInformation("Êã ÇáÇÊÕÇá ÈäÌÇÍ! ÌÇÑí ÅäÔÇÁ ŞÇÚÏÉ ÇáÈíÇäÇÊ ÅĞÇ áÒã ÇáÃãÑ...");
+                db.Database.EnsureCreated();
+                break; // äÌÍ ÇáÇÊÕÇá¡ äÎÑÌ ãä ÇáÍáŞÉ
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning($"İÔáÊ ÇáãÍÇæáÉ ÑŞã {i + 1}: {ex.Message}");
+        }
+
+        // ÅĞÇ áã Êßä ÇáãÍÇæáÉ ÇáÃÎíÑÉ¡ ääÊÙÑ æäÍÇæá ãÑÉ ÃÎÑì
+        if (i < maxRetries - 1)
+        {
+            logger.LogInformation($"ŞÇÚÏÉ ÇáÈíÇäÇÊ ÛíÑ ÌÇåÒÉ ÈÚÏ. ÇáÇäÊÙÇÑ áãÏÉ {delayMs / 1000} ËæÇäò...");
+            await Task.Delay(delayMs);
+        }
+        else
+        {
+            logger.LogError("ÎØÃ İÇÏÍ: İÔá ÇáÇÊÕÇá ÈŞÇÚÏÉ ÇáÈíÇäÇÊ ÈÚÏ ÚÏÉ ãÍÇæáÇÊ.");
+            // íãßäß Ñãí ÇÓÊËäÇÁ áÅíŞÇİ ÇáÊØÈíŞ ÈÇáßÇãá Ãæ ÊÑßå íÍÇæá
+            throw new Exception("ÊÚĞÑ ÇáÇÊÕÇá ÈŞÇÚÏÉ ÇáÈíÇäÇÊ İí Railway.");
+        }
     }
 }
 
