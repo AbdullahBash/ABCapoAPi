@@ -15,11 +15,12 @@ var builder = WebApplication.CreateBuilder(args);
 // ===  ÕœÌœ „Ã·œ wwwroot ===
 builder.WebHost.UseWebRoot("wwwroot");
 
-// === 1. ≈⁄œ«œ DbContext («·Õ· «·‰Â«∆Ì ·„‘«ﬂ· Railway SSL) ===
+// === 1. ≈⁄œ«œ DbContext (≈⁄œ«œ«  «·« ’«·) ===
 var connectionString = builder.Configuration["DATABASE_URL"];
 
 if (string.IsNullOrEmpty(connectionString))
 {
+    //  „ ≈’·«Õ «·Œÿ√ Â‰«:  €ÌÌ— ] ≈·Ï )
     connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 }
 
@@ -32,7 +33,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 {
     options.UseNpgsql(connectionString, npgsqlOptions =>
     {
-        // Â–« «·”ÿ— ÷—Ê—Ì Ãœ« ·Õ· „‘ﬂ·… (EndOfStreamException) ›Ì Railway
+        //  ›⁄Ì· ≈⁄«œ… «·„Õ«Ê·… «· ·ﬁ«∆Ì… ›Ì Õ«·… «·«‰ﬁÿ«⁄ «·„ƒﬁ 
         npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 5);
         npgsqlOptions.CommandTimeout(30);
     });
@@ -102,53 +103,38 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// === 4. „‰ÿﬁ »œ¡ «· ‘€Ì· (Retry Logic + EnsureCreated) ===
+// === 4. „‰ÿﬁ »œ¡ «· ‘€Ì· «·ÃœÌœ (Õ·ﬁ… ·«‰Â«∆Ì… Õ Ï ‰Ã«Õ «·« ’«·) ===
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    int maxRetries = 5;
-    int delayMs = 5000;
+    bool dbReady = false;
+    int retryCount = 0;
 
-    for (int i = 0; i < maxRetries; i++)
+    // ”‰” „— ›Ì «·„Õ«Ê·… Õ Ï  ‰ÃÕ ﬁ«⁄œ… «·»Ì«‰« 
+    while (!dbReady)
     {
         try
         {
-            logger.LogInformation($"„Õ«Ê·… «·« ’«· »ﬁ«⁄œ… «·»Ì«‰« ... ({i + 1}/{maxRetries})");
-            if (await db.Database.CanConnectAsync())
-            {
-                logger.LogInformation(" „ «·« ’«· »ﬁ«⁄œ… «·»Ì«‰«  »‰Ã«Õ!");
-                break;
-            }
+            retryCount++;
+            logger.LogInformation($"„Õ«Ê·…  ÂÌ∆… ﬁ«⁄œ… «·»Ì«‰« ... („Õ«Ê·… —ﬁ„ {retryCount})");
+
+            // ‰ﬁÊ„ »≈‰‘«¡ ﬁ«⁄œ… «·»Ì«‰«  Ê«·Ãœ«Ê· „»«‘—…
+            // Â–« «·√„— Ì ÿ·» « ’«·«° ·–« ”‰Õ«Ê·Â œ«Œ· «·Õ·ﬁ…
+            db.Database.EnsureCreated();
+
+            logger.LogInformation(" „ «·« ’«· »ﬁ«⁄œ… «·»Ì«‰«  Ê≈‰‘«¡ «·Ãœ«Ê· »‰Ã«Õ!");
+            dbReady = true;
         }
         catch (Exception ex)
         {
-            logger.LogWarning($"›‘· «·« ’«· »«·„Õ«Ê·… {i + 1}: {ex.Message}");
-        }
+            logger.LogWarning($"›‘· «·« ’«· √Ê «·≈‰‘«¡: {ex.Message}");
+            logger.LogInformation("«‰ Ÿ«— 5 ÀÊ«‰Ú ··„Õ«Ê·… „—… √Œ—Ï...");
 
-        if (i < maxRetries - 1)
-        {
-            logger.LogInformation("ﬁ«⁄œ… «·»Ì«‰«  €Ì— Ã«Â“… »⁄œ. «·«‰ Ÿ«— 5 ÀÊ«‰Ú...");
-            await Task.Delay(delayMs);
+            // ‰‰ Ÿ— 5 ÀÊ«‰Ú À„ ‰Õ«Ê· „‰ ÃœÌœ (·‰ Ì‰Â«— «· ÿ»Ìﬁ Â‰«)
+            await Task.Delay(5000);
         }
-        else
-        {
-            logger.LogError("›‘· «·« ’«· »ﬁ«⁄œ… «·»Ì«‰« .");
-            throw new Exception("›‘· «·« ’«·.");
-        }
-    }
-
-    try
-    {
-        logger.LogInformation("Ã«—Ì «· Õﬁﬁ „‰ «·Ãœ«Ê· Ê≈‰‘«∆Â«...");
-        db.Database.EnsureCreated();
-        logger.LogInformation(" „ «· √ﬂœ „‰ ﬁ«⁄œ… «·»Ì«‰«  Ê«·Ãœ«Ê· »‰Ã«Õ.");
-    }
-    catch (Exception ex)
-    {
-        logger.LogError($"Œÿ√ √À‰«¡ ≈‰‘«¡ «·Ãœ«Ê·: {ex.Message}");
-        throw;
     }
 }
 
