@@ -15,13 +15,17 @@ var builder = WebApplication.CreateBuilder(args);
 // ===  ÕœÌœ „Ã·œ wwwroot ===
 builder.WebHost.UseWebRoot("wwwroot");
 
-// === 1. ≈⁄œ«œ DbContext (≈⁄œ«œ«  «·« ’«·) ===
+// === 1. ≈⁄œ«œ DbContext („⁄ «· ‘ŒÌ’ Diagnostics) ===
+Console.WriteLine("--- DEBUG: »œ¡ ›Õ’ «·« ’«· »ﬁ«⁄œ… «·»Ì«‰«  ---");
+
 var connectionString = builder.Configuration["DATABASE_URL"];
+Console.WriteLine($"Â·  „ «·⁄ÀÊ— ⁄·Ï DATABASE_URLø {(!string.IsNullOrEmpty(connectionString))}");
 
 if (string.IsNullOrEmpty(connectionString))
 {
-    //  „ ≈’·«Õ «·Œÿ√ Â‰«:  €ÌÌ— ] ≈·Ï )
+    Console.WriteLine("ALERT: ·„ Ì „ «·⁄ÀÊ— ⁄·Ï DATABASE_URL. ”Ì „ «” Œœ«„ DefaultConnection.");
     connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    Console.WriteLine($"ﬁÌ„… DefaultConnection (√Ê· 50 Õ—›): {connectionString?.Substring(0, Math.Min(50, connectionString.Length))}...");
 }
 
 if (string.IsNullOrEmpty(connectionString))
@@ -29,17 +33,19 @@ if (string.IsNullOrEmpty(connectionString))
     throw new Exception("·„ Ì „ «·⁄ÀÊ— ⁄·Ï ”·”·… « ’«· ﬁ«⁄œ… «·»Ì«‰« .");
 }
 
+Console.WriteLine($"”Ì „ «” Œœ«„ «·« ’«·: {connectionString?.Substring(0, Math.Min(50, connectionString.Length))}...");
+Console.WriteLine("-----------------------------------------------");
+
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     options.UseNpgsql(connectionString, npgsqlOptions =>
     {
-        //  ›⁄Ì· ≈⁄«œ… «·„Õ«Ê·… «· ·ﬁ«∆Ì… ›Ì Õ«·… «·«‰ﬁÿ«⁄ «·„ƒﬁ 
         npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 5);
         npgsqlOptions.CommandTimeout(30);
     });
 });
 
-// === 2. ≈⁄œ«œ «·„’«œﬁ… (JWT + Social Login) ===
+// === 2. ≈⁄œ«œ «·„’«œﬁ… ===
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -93,7 +99,6 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
-// === 3. ≈⁄œ«œ Middleware ===
 app.UseSwagger();
 app.UseSwaggerUI();
 app.UseHttpsRedirection();
@@ -103,7 +108,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// === 4. „‰ÿﬁ »œ¡ «· ‘€Ì· «·ÃœÌœ (Õ·ﬁ… ·«‰Â«∆Ì… Õ Ï ‰Ã«Õ «·« ’«·) ===
+// === 4. „‰ÿﬁ »œ¡ «· ‘€Ì· ===
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -112,27 +117,19 @@ using (var scope = app.Services.CreateScope())
     bool dbReady = false;
     int retryCount = 0;
 
-    // ”‰” „— ›Ì «·„Õ«Ê·… Õ Ï  ‰ÃÕ ﬁ«⁄œ… «·»Ì«‰« 
     while (!dbReady)
     {
         try
         {
             retryCount++;
-            logger.LogInformation($"„Õ«Ê·…  ÂÌ∆… ﬁ«⁄œ… «·»Ì«‰« ... („Õ«Ê·… —ﬁ„ {retryCount})");
-
-            // ‰ﬁÊ„ »≈‰‘«¡ ﬁ«⁄œ… «·»Ì«‰«  Ê«·Ãœ«Ê· „»«‘—…
-            // Â–« «·√„— Ì ÿ·» « ’«·«° ·–« ”‰Õ«Ê·Â œ«Œ· «·Õ·ﬁ…
+            logger.LogInformation($"„Õ«Ê·… «·« ’«·... ({retryCount})");
             db.Database.EnsureCreated();
-
-            logger.LogInformation(" „ «·« ’«· »ﬁ«⁄œ… «·»Ì«‰«  Ê≈‰‘«¡ «·Ãœ«Ê· »‰Ã«Õ!");
+            logger.LogInformation(" „ «·« ’«· »‰Ã«Õ!");
             dbReady = true;
         }
         catch (Exception ex)
         {
-            logger.LogWarning($"›‘· «·« ’«· √Ê «·≈‰‘«¡: {ex.Message}");
-            logger.LogInformation("«‰ Ÿ«— 5 ÀÊ«‰Ú ··„Õ«Ê·… „—… √Œ—Ï...");
-
-            // ‰‰ Ÿ— 5 ÀÊ«‰Ú À„ ‰Õ«Ê· „‰ ÃœÌœ (·‰ Ì‰Â«— «· ÿ»Ìﬁ Â‰«)
+            logger.LogWarning($"›‘· «·« ’«·: {ex.Message}");
             await Task.Delay(5000);
         }
     }
